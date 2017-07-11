@@ -53,7 +53,7 @@
 /***********************************************************************/
 
 // These are the Octal addresses that will be assigned
-const uint16_t node_address_set[10] = { 00, 02, 05, 012, 015, 022, 025, 032, 035, 045 };
+const uint16_t node_address_set[6] = { 00, 01, 011, 021, 031, 041};
  
 // 0 = Master
 // 1-2 (02,05)   = Children of Master(00)
@@ -73,7 +73,7 @@ RF24Network network(radio);
 
 uint16_t this_node;                           // Our node address
 
-const unsigned long interval = 1000; // ms       // Delay manager to send pings regularly.
+const unsigned long interval = 50; // ms       // Delay manager to send pings regularly.
 unsigned long last_time_sent;
 
 
