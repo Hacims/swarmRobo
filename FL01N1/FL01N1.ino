@@ -85,11 +85,21 @@ short next_ping_node_index = 0;
 
 bool send_T(uint16_t to);                      // Prototypes for functions to send & handle messages
 bool send_N(uint16_t to);
+bool send_A(uint16_t to);
 void handle_T(RF24NetworkHeader& header);
 void handle_N(RF24NetworkHeader& header);
 void add_node(uint16_t node);
-
-
+void handle_J(RF24NetworkHeader& header);
+struct msg_J {          // seting up mesage to send cordinents to the flight leader
+  int x;
+  int y;
+  bool sw;
+};
+struct msg_A {          // seting up mesage to send cordinents to the flight leader
+  int x;
+  int y;
+  bool sw;
+};
 void setup(){
   
   Serial.begin(9600);
@@ -118,6 +128,7 @@ void loop(){
       switch (header.type){                              // Dispatch the message to the correct handler.
         case 'T': handle_T(header); break;
         case 'N': handle_N(header); break;
+        case 'J': handle_J(header); break;
         default:  printf_P(PSTR("*** WARNING *** Unknown message type %c\n\r"),header.type);
                   network.read(header,0,0);
                   break;
@@ -146,6 +157,15 @@ void loop(){
     
     if ( this_node > 00 || to == 00 ){                    // Normal nodes send a 'T' ping
         ok = send_T(to);   
+   
+      ok = send_A(to);
+  if (ok){
+    printf_P(PSTR("%lu: APP Send_A ok\n\r"),millis());
+  }else{
+    printf_P(PSTR("%lu: APP Send_A failed\n\r"),millis());
+    last_time_sent -=100;
+  }
+    
     }else{                                                // Base node sends the current active nodes out
         ok = send_N(to);
     }
@@ -189,8 +209,30 @@ bool send_N(uint16_t to)
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
   return network.write(header,active_nodes,sizeof(active_nodes));
+  
 }
-
+/**
+ * Send an 'J' message, the active node list
+ */
+bool send_A(uint16_t to)
+{
+  RF24NetworkHeader header(/*to node*/ to, /*type*/ 'A' /*Time*/);
+  
+  printf_P(PSTR("---------------------------------\n\r"));
+  printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
+  int x = 412;
+  int y = 409;
+  bool sw = false;
+  msg_A msg = {x, y, sw};
+  Serial.print("outgoing msg : x: ");
+  Serial.print(x);
+  Serial.print(" y ");
+  Serial.print(y);
+  Serial.print(" sw ");
+  Serial.print(sw);
+  
+  return network.write(header, &msg, sizeof (msg));
+}
 /**
  * Handle a 'T' message
  * Add the node to the list of active nodes
@@ -204,6 +246,28 @@ void handle_T(RF24NetworkHeader& header){
 
   if ( header.from_node != this_node || header.from_node > 00 )                                // If this message is from ourselves or the base, don't bother adding it to the active nodes.
     add_node(header.from_node);
+}
+/**
+ * Handle a 'J' message
+ */
+void handle_J(RF24NetworkHeader& header){
+
+  unsigned long message;              // The 'T' message is just a ulong, containing the time
+  msg_J msg;
+  network.read(header,&msg,sizeof(msg));
+  printf_P(PSTR("%lu: APP J Message Received %lu from 0%o\n\r"),millis(),msg,header.from_node);
+  Serial.print("...header.from_node: ");
+  Serial.println(header.from_node);
+  Serial.print(" x ");
+  Serial.print(msg.x);
+  Serial.print("  y ");
+  Serial.print(msg.y);
+  Serial.print("  sw ");
+  Serial.println(msg.sw);
+
+
+  //if ( header.from_node != this_node || header.from_node > 00 )                                // If this message is from ourselves or the base, don't bother adding it to the active nodes.
+    //add_node(header.from_node);
 }
 
 /**

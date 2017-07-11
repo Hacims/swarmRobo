@@ -85,10 +85,17 @@ short next_ping_node_index = 0;
 
 bool send_T(uint16_t to);                      // Prototypes for functions to send & handle messages
 bool send_N(uint16_t to);
+bool send_J(uint16_t to);
 void handle_T(RF24NetworkHeader& header);
 void handle_N(RF24NetworkHeader& header);
+void handle_J(RF24NetworkHeader& header);
 void add_node(uint16_t node);
 
+struct msg_J {          // seting up mesage to send cordinents to the flight leader
+  int x;
+  int y;
+  bool sw;
+};
 
 void setup(){
   
@@ -146,10 +153,12 @@ void loop(){
 
     
     if ( this_node > 00 || to == 00 ){                    // Normal nodes send a 'T' ping
+       Serial.println ("send_t");
         ok = send_T(to);   
-    }else{                                                // Base node sends the current active nodes out
+    }else{                           // Base node sends the current active nodes out
+      Serial.println("send_n");
         ok = send_N(to);
-    }
+ //   }
     
     if (ok){                                              // Notify us of the result
         printf_P(PSTR("%lu: APP Send ok\n\r"),millis());
@@ -157,6 +166,13 @@ void loop(){
         printf_P(PSTR("%lu: APP Send failed\n\r"),millis());
         last_time_sent -= 100;                            // Try sending at a different time next time
     }
+  ok = send_J(to);
+  if (ok){
+    printf_P(PSTR("%lu: APP Send_J ok\n\r"),millis());
+  }else{
+    printf_P(PSTR("%lu: APP Send_J failed\n\r"),millis());
+    last_time_sent -=100;
+  }
   }
 
 
@@ -165,7 +181,7 @@ void loop(){
 //      network.sleepNode(2,0);         // Sleep this node for 2 seconds or a payload is received (interrupt 0 triggered), whichever comes first
 //  }
 }
-
+}
 /**
  * Send a 'T' message, the current time
  */
@@ -192,6 +208,28 @@ bool send_N(uint16_t to)
   return network.write(header,active_nodes,sizeof(active_nodes));
 }
 
+/**
+ * Send an 'J' message, the active node list
+ */
+bool send_J(uint16_t to)
+{
+  RF24NetworkHeader header(/*to node*/ to, /*type*/ 'J' /*Time*/);
+  
+  printf_P(PSTR("---------------------------------\n\r"));
+  printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
+  int x = 512;
+  int y = 509;
+  bool sw = false;
+  msg_J msg = {x, y, sw};
+  Serial.print("outgoing msg : x: ");
+  Serial.print(x);
+  Serial.print(" y ");
+  Serial.print(y);
+  Serial.print(" sw ");
+  Serial.print(sw);
+  
+  return network.write(header, &msg, sizeof (msg));
+}
 /**
  * Handle a 'T' message
  * Add the node to the list of active nodes

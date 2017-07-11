@@ -88,7 +88,12 @@ bool send_N(uint16_t to);
 void handle_T(RF24NetworkHeader& header);
 void handle_N(RF24NetworkHeader& header);
 void add_node(uint16_t node);
-
+void handle_A(RF24NetworkHeader& header);
+struct msg_A {          // seting up mesage to send cordinents to the flight leader
+  int x;
+  int y;
+  bool sw;
+};
 
 void setup(){
   
@@ -118,6 +123,7 @@ void loop(){
       switch (header.type){                              // Dispatch the message to the correct handler.
         case 'T': handle_T(header); break;
         case 'N': handle_N(header); break;
+        case 'A': handle_A(header); break;
         default:  printf_P(PSTR("*** WARNING *** Unknown message type %c\n\r"),header.type);
                   network.read(header,0,0);
                   break;
@@ -178,7 +184,28 @@ bool send_T(uint16_t to)
   printf_P(PSTR("%lu: APP Sending %lu to 0%o...\n\r"),millis(),message,to);
   return network.write(header,&message,sizeof(unsigned long));
 }
-
+/**
+ * Send an 'J' message, the active node list
+ */
+bool send_A(uint16_t to)
+{
+  RF24NetworkHeader header(/*to node*/ to, /*type*/ 'A' /*Time*/);
+  
+  printf_P(PSTR("---------------------------------\n\r"));
+  printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
+  int x = 412;
+  int y = 409;
+  bool sw = false;
+  msg_A msg = {x, y, sw};
+  Serial.print("outgoing msg : x: ");
+  Serial.print(x);
+  Serial.print(" y ");
+  Serial.print(y);
+  Serial.print(" sw ");
+  Serial.print(sw);
+  
+  return network.write(header, &msg, sizeof (msg));
+}
 /**
  * Send an 'N' message, the active node list
  */
@@ -220,7 +247,28 @@ void handle_N(RF24NetworkHeader& header)
   while ( i < max_active_nodes && incoming_nodes[i] > 00 )
     add_node(incoming_nodes[i++]);
 }
+/**
+ * Handle a 'A' message
+ */
+void handle_A(RF24NetworkHeader& header){
 
+  unsigned long message;              // The 'T' message is just a ulong, containing the time
+  msg_A msg;
+  network.read(header,&msg,sizeof(msg));
+  printf_P(PSTR("%lu: APP A Message Received %lu from 0%o\n\r"),millis(),msg,header.from_node);
+  Serial.print("...header.from_node: ");
+  Serial.println(header.from_node);
+  Serial.print(" x ");
+  Serial.print(msg.x);
+  Serial.print("  y ");
+  Serial.print(msg.y);
+  Serial.print("  sw ");
+  Serial.println(msg.sw);
+
+
+  //if ( header.from_node != this_node || header.from_node > 00 )                                // If this message is from ourselves or the base, don't bother adding it to the active nodes.
+    //add_node(header.from_node);
+}
 /**
  * Add a particular node to the current list of active nodes
  */
