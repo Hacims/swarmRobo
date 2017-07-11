@@ -1,3 +1,10 @@
+// communication base code for network addresed robot communication
+//weopons controller will be adress 00
+// flight leader address 02
+//wingman address will be012
+
+
+
 /* YourDuinoStarter Example: nRF24L01 Radio remote control of servos by joystick
   - WHAT IT DOES
    Joystick on other Arduino communicates by nRF25L01 Radio to
@@ -21,6 +28,8 @@
    Questions: terry@yourduino.com */
 
 /*-----( Import needed libraries )-----*/
+#include <avr/pgmspace.h>
+#include <RF24Network.h>
 #include <SPI.h>   // Comes with Arduino IDE
 #include "RF24.h"  // Download and Install (See above)
 #include "printf.h" // Needed for "printDetails" Takes up some memory
@@ -28,6 +37,24 @@
 // http://playground.arduino.cc/uploads/ComponentLib/SoftwareServo.zip
 //#include <SoftwareServo.h>  // Regular Servo library creates timer conflict!
 /*-----( Declare Constants and Pin Numbers )-----*/
+/***********************************************************************
+************* Set the Node Address *************************************
+/***********************************************************************/
+
+// These are the Octal addresses that will be assigned
+const uint16_t node_address_set[10] = { 00, 02, 05, 012, 015, 022, 025, 032, 035, 045 };
+ 
+// 0 = Master
+// 1-2 (02,05)   = Children of Master(00)
+// 3,5 (012,022) = Children of (02)
+// 4,6 (015,025) = Children of (05)
+// 7   (032)     = Child of (02)
+// 8,9 (035,045) = Children of (05)
+
+uint8_t NODE_ADDRESS = 1;  // Use numbers 0 through to select an address from the array
+
+/***********************************************************************/
+/***********************************************************************/
 #define  CE_PIN  7   // The pins to be used for CE and SN
 #define  CSN_PIN 8
 
@@ -42,12 +69,31 @@
 
   /*-----( Declare objects )-----*/
 /* Hardware configuration: Set up nRF24L01 radio on SPI bus plus (usually) pins 7 & 8 (Can be changed) */
-RF24 radio(CE_PIN, CSN_PIN);
+RF24Network network(radio);
+//RF24 radio(CE_PIN, CSN_PIN);
 
 //SoftwareServo HorizontalServo;
 //SoftwareServo VerticalServo;  // create servo objects to control servos
 
 /*-----( Declare Variables )-----*/
+uint16_t this_node;                           // Our node address
+
+const unsigned long interval = 1000; // ms       // Delay manager to send pings regularly.
+unsigned long last_time_sent;
+
+
+const short max_active_nodes = 10;            // Array of nodes we are aware of
+uint16_t active_nodes[max_active_nodes];
+short num_active_nodes = 0;
+short next_ping_node_index = 0;
+
+
+bool send_T(uint16_t to);                      // Prototypes for functions to send & handle messages
+bool send_N(uint16_t to);
+void handle_T(RF24NetworkHeader& header);
+void handle_N(RF24NetworkHeader& header);
+void add_node(uint16_t node);
+
 byte addresses[][6] = {"1Node", "2Node"}; // These will be the names of the "Pipes"
 
 // Allows testing of radios and code without servo hardware. Set 'true' when servos connected
@@ -86,11 +132,6 @@ const byte disablePin = 2; //OSMC disable, pull LOW to enable motor controller
 
 int analogTmp = 0; //temporary variable to store
 int throttle, direction = 0; //throttle (Y axis) and direction (X axis)
-// Exponential smothing parameters
-float leftMotorPred = 0.0;
-float rightMotorPred = 0.0;
-float alpha = .25;  // llwer number reduces sensitivity and decreases filter response
-float beta = .75; // the sum of these two parameters must equal 1
 
 
 int leftMotor, leftMotorScaled = 0; //left Motor helper variables
@@ -212,11 +253,6 @@ void loop()  {
   //print the initial mix results
   Serial.print("LIN:"); Serial.print( leftMotor, DEC);
   Serial.print(", RIN:"); Serial.print( rightMotor, DEC);
-// exponential smothing to reduce the sensitvity and jerkyness of the rbot in motion
-leftMotorPred = alpha * leftMotor + beta * leftMotorPred;
-rightMotorPred = alpha * rightMotor + beta * rightMotorPred;
-leftMotor = leftMotorPred;
-rightMotor = rightMotorPred;
 
   //calculate the scale of the results in comparision base 8 bit PWM resolution
   leftMotorScale =  leftMotor / 255.0;

@@ -89,8 +89,8 @@ int throttle, direction = 0; //throttle (Y axis) and direction (X axis)
 // Exponential smothing parameters
 float leftMotorPred = 0.0;
 float rightMotorPred = 0.0;
-float alpha = .25;  // llwer number reduces sensitivity and decreases filter response
-float beta = .75; // the sum of these two parameters must equal 1
+float alpha = .1;  // llwer number reduces sensitivity and decreases filter response
+float beta = 0.9; // the sum of these two parameters must equal 1
 
 
 int leftMotor, leftMotorScaled = 0; //left Motor helper variables
