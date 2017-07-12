@@ -75,7 +75,9 @@ uint16_t this_node;                           // Our node address
 
 const unsigned long interval = 50; // ms       // Delay manager to send pings regularly.
 unsigned long last_time_sent;
-
+#define JOYSTICK_X   A0  // The Joystick potentiometers connected to Arduino Analog inputs
+#define JOYSTICK_Y   A1
+#define JOYSTICK_SW  A2  // The Joystick push-down switch, will be used as a Digital input
 
 const short max_active_nodes = 10;            // Array of nodes we are aware of
 uint16_t active_nodes[max_active_nodes];
@@ -90,6 +92,17 @@ void handle_T(RF24NetworkHeader& header);
 void handle_N(RF24NetworkHeader& header);
 void handle_J(RF24NetworkHeader& header);
 void add_node(uint16_t node);
+/**
+  Create a data structure for transmitting and receiving data
+  This allows many variables to be easily sent and received in a single transmission
+  See http://www.cplusplus.com/doc/tutorial/structures/
+*/
+struct dataStruct {
+  unsigned long _micros;  // to save response times
+  int Xposition;          // The Joystick position values
+  int Yposition;
+  bool switchOn;          // The Joystick push-down switch
+} myData;                 // This can be accessed in the form:  myData.Xposition  etc.
 
 struct msg_J {          // seting up mesage to send cordinents to the flight leader
   int x;
@@ -98,7 +111,12 @@ struct msg_J {          // seting up mesage to send cordinents to the flight lea
 };
 
 void setup(){
-  
+  //Serial.begin(9600);  // MUST reset the Serial Monitor to 115200 (lower right of window )
+  // NOTE: The "F" in the print statements means "unchangable data; save in Flash Memory to conserve SRAM"
+  //Serial.println(F("YourDuino.com Example: Send joystick data by nRF24L01 radio to another Arduino"));
+  //printf_begin(); // Needed for "printDetails" Takes up some memory
+  pinMode(JOYSTICK_SW, INPUT_PULLUP);  // Pin A2 will be used as a digital input
+
   Serial.begin(9600);
   printf_begin();
   printf_P(PSTR("\n\rRF24Network/examples/meshping/\n\r"));
@@ -113,15 +131,21 @@ void setup(){
 }
 
 void loop(){
-    
+        /*********************( Read the Joystick positions )*************************/
+    myData.Xposition = analogRead(JOYSTICK_X);
+    myData.Yposition = analogRead(JOYSTICK_Y);
+    myData.switchOn  = !digitalRead(JOYSTICK_SW);  // Invert the pulldown switch
+
+  myData._micros = micros();  // Send back for timing
+
   network.update();                                      // Pump the network regularly
 
    while ( network.available() )  {                      // Is there anything ready for us?
      
     RF24NetworkHeader header;                            // If so, take a look at it
     network.peek(header);
-    Serial.print(" header type ");
-    Serial.print(header.type);
+    //Serial.print(" header type ");
+    //Serial.print(header.type);
     
       switch (header.type){                              // Dispatch the message to the correct handler.
         case 'T': handle_T(header); break;
@@ -153,10 +177,10 @@ void loop(){
 
     
     if ( this_node > 00 || to == 00 ){                    // Normal nodes send a 'T' ping
-       Serial.println ("send_t");
+       //Serial.println ("send_t");
         ok = send_T(to);   
     }else{                           // Base node sends the current active nodes out
-      Serial.println("send_n");
+      //Serial.println("send_n");
         ok = send_N(to);
  //   }
     
@@ -217,16 +241,16 @@ bool send_J(uint16_t to)
   
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
-  int x = 512;
-  int y = 509;
-  bool sw = false;
+  int x = myData.Xposition;
+  int y = myData.Yposition;
+  bool sw = myData.switchOn;
   msg_J msg = {x, y, sw};
-  Serial.print("outgoing msg : x: ");
-  Serial.print(x);
-  Serial.print(" y ");
-  Serial.print(y);
-  Serial.print(" sw ");
-  Serial.print(sw);
+  //Serial.print("outgoing msg : x: ");
+  //Serial.print(x);
+  //Serial.print(" y ");
+  //Serial.print(y);
+  //Serial.print(" sw ");
+  //Serial.print(sw);
   
   return network.write(header, &msg, sizeof (msg));
 }

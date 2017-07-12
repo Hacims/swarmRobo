@@ -89,6 +89,48 @@ void handle_T(RF24NetworkHeader& header);
 void handle_N(RF24NetworkHeader& header);
 void add_node(uint16_t node);
 void handle_A(RF24NetworkHeader& header);
+int HorizontalJoystickReceived; // Variable to store received Joystick values
+int HorizontalServoPosition;    // variable to store the servo position
+
+int VerticalJoystickReceived;   // Variable to store received Joystick values
+int VerticalServoPosition;      // variable to store the servo positio
+
+/**
+  Create a data structure for transmitting and receiving data
+  This allows many variables to be easily sent and received in a single transmission
+  See http://www.cplusplus.com/doc/tutorial/structures/
+*/
+struct dataStruct {
+  unsigned long _micros;  // to save response times
+  int Xposition;          // The Joystick position values
+  int Yposition;
+  bool switchOn;          // The Joystick push-down switch
+} myData;                 // This can be accessed in the form:  myData.Xposition  etc.
+
+
+
+//Atmega328p based Arduino code (should work withouth modifications with Atmega168/88), tested on RBBB Arduino clone by Modern Device:
+const byte joysticYA = A0; //Analog Jostick Y axis
+const byte joysticXA = A1; //Analog Jostick X axis
+
+const byte controllerFA = 9; //PWM FORWARD PIN for OSMC Controller A (left motor)
+const byte controllerRA = 6;  //PWM REVERSE PIN for OSMC Controller A (left motor)
+const byte controllerFB = 3;  //PWM FORWARD PIN for OSMC Controller B (right motor)
+const byte controllerRB = 5;  //PWM REVERSE PIN for OSMC Controller B (right motor)
+const byte disablePin = 2; //OSMC disable, pull LOW to enable motor controller
+
+int analogTmp = 0; //temporary variable to store
+int throttle, direction = 0; //throttle (Y axis) and direction (X axis)
+int leftMotor, leftMotorScaled = 0; //left Motor helper variables
+float leftMotorScale = 0;
+
+int rightMotor, rightMotorScaled = 0; //right Motor helper variables
+float rightMotorScale = 0;
+
+float maxMotorScale = 0; //holds the mixed output scaling factor
+
+int deadZone = 10; //jostick dead zone
+
 struct msg_A {          // seting up mesage to send cordinents to the flight leader
   int x;
   int y;
@@ -96,9 +138,27 @@ struct msg_A {          // seting up mesage to send cordinents to the flight lea
 };
 
 void setup(){
-  
-  Serial.begin(9600);
+   
+  //initialization of pins
+  //Serial.begin(9600);
+  pinMode(controllerFA, OUTPUT);
+  pinMode(controllerRA, OUTPUT);
+  pinMode(controllerFB, OUTPUT);
+  pinMode(controllerRB, OUTPUT);
+
+  pinMode(disablePin, OUTPUT);
+  digitalWrite(disablePin, LOW);
+  Serial.begin(9600);   // MUST reset the Serial Monitor to 115200 (lower right of window )
+  // NOTE: The "F" in the print statements means "unchangable data; save in Flash Memory to conserve SRAM"
+  // // Serial.println(F("YourDuino.com Example: Receive joystick data by nRF24L01 radio from another Arduino"));
+  // // Serial.println(F("and control servos if attached (Check 'hasHardware' variable"));
+  //printf_begin(); // Needed for "printDetails" Takes up some memory
+ // Serial.begin(9600);
   printf_begin();
+ // printf_P(PSTR("\n\rRF24Network/examples/meshping/\n\r"));
+
+  //Serial.begin(9600);
+ // printf_begin();
   printf_P(PSTR("\n\rRF24Network/examples/meshping/\n\r"));
 
   this_node = node_address_set[NODE_ADDRESS];            // Which node are we?
@@ -197,12 +257,12 @@ bool send_A(uint16_t to)
   int y = 409;
   bool sw = false;
   msg_A msg = {x, y, sw};
-  Serial.print("outgoing msg : x: ");
-  Serial.print(x);
-  Serial.print(" y ");
-  Serial.print(y);
-  Serial.print(" sw ");
-  Serial.print(sw);
+  // // Serial.print("outgoing msg : x: ");
+  // // Serial.print(x);
+  // // Serial.print(" y ");
+  // Serial.print(y);
+  // Serial.print(" sw ");
+  // Serial.print(sw);
   
   return network.write(header, &msg, sizeof (msg));
 }
@@ -256,14 +316,125 @@ void handle_A(RF24NetworkHeader& header){
   msg_A msg;
   network.read(header,&msg,sizeof(msg));
   printf_P(PSTR("%lu: APP A Message Received %lu from 0%o\n\r"),millis(),msg,header.from_node);
-  Serial.print("...header.from_node: ");
-  Serial.println(header.from_node);
-  Serial.print(" x ");
-  Serial.print(msg.x);
-  Serial.print("  y ");
-  Serial.print(msg.y);
-  Serial.print("  sw ");
-  Serial.println(msg.sw);
+  // Serial.print("...header.from_node: ");
+
+myData.Xposition = msg.x;
+myData.Yposition = msg.y;
+myData.switchOn = msg.sw;
+  // Serial.print("X joystick from SC: ");
+  // Serial.print(myData.Xposition);
+  // Serial.print("   Y joystick from SC: ");
+  // Serial.println(myData.Yposition);
+    //aquire the analog input for Y  and rescale the 0..1023 range to -255..255 range
+  analogTmp = myData.Yposition;
+  throttle = (512 - analogTmp) / 2;
+
+  delayMicroseconds(100);
+  //...and  the same for X axis
+  analogTmp = myData.Xposition;
+  direction = -(512 - analogTmp) / 2;
+
+  //mix throttle and direction
+  leftMotor = throttle + direction;
+  rightMotor = throttle - direction;
+
+  //print the initial mix results
+  // Serial.print("LIN:"); // Serial.print( leftMotor, DEC);
+  // Serial.print(", RIN:"); // Serial.print( rightMotor, DEC);
+
+  //calculate the scale of the results in comparision base 8 bit PWM resolution
+  leftMotorScale =  leftMotor / 255.0;
+  leftMotorScale = abs(leftMotorScale);
+  rightMotorScale =  rightMotor / 255.0;
+  rightMotorScale = abs(rightMotorScale);
+
+  // Serial.print("| LSCALE:"); // Serial.print( leftMotorScale, 2);
+  // Serial.print(", RSCALE:"); // Serial.print( rightMotorScale, 2);
+
+  //choose the max scale value if it is above 1
+  maxMotorScale = max(leftMotorScale, rightMotorScale);
+  maxMotorScale = max(1, maxMotorScale);
+
+  //and apply it to the mixed values
+  leftMotorScaled = constrain(leftMotor / maxMotorScale, -255, 255);
+  rightMotorScaled = constrain(rightMotor / maxMotorScale, -255, 255);
+  // Serial.println();
+  // Serial.print("| LOUT:"); // Serial.print( leftMotorScaled);
+  // Serial.print(", ROUT:"); // Serial.print( rightMotorScaled);
+
+  // Serial.print(" |");
+
+  //apply the results to appropriate uC PWM outputs for the LEFT motor:
+  if (abs(leftMotorScaled) > deadZone)
+  {
+
+    if (leftMotorScaled > 0)
+    {
+      // Serial.print("F");
+      // Serial.print(abs(leftMotorScaled), DEC);
+
+      analogWrite(controllerRA, 0);
+      analogWrite(controllerFA, abs(leftMotorScaled));
+    }
+    else
+    {
+      // Serial.print("R");
+      // Serial.print(abs(leftMotorScaled), DEC);
+
+      analogWrite(controllerFA, 0);
+      analogWrite(controllerRA, abs(leftMotorScaled));
+    }
+  }
+  else
+  {
+    // Serial.print("IDLE");
+    analogWrite(controllerFA, 0);
+    analogWrite(controllerRA, 0);
+  }
+
+  //apply the results to appropriate uC PWM outputs for the RIGHT motor:
+  if (abs(rightMotorScaled) > deadZone)
+  {
+
+    if (rightMotorScaled > 0)
+    {
+      // Serial.print("F");
+      // Serial.print(abs(rightMotorScaled), DEC);
+
+      analogWrite(controllerRB, 0);
+      analogWrite(controllerFB, abs(rightMotorScaled));
+    }
+    else
+    {
+      // Serial.print("R");
+      // Serial.print(abs(rightMotorScaled), DEC);
+
+      analogWrite(controllerFB, 0);
+      analogWrite(controllerRB, abs(rightMotorScaled));
+    }
+  }
+  else
+  {
+    // Serial.print("IDLE");
+    analogWrite(controllerFB, 0);
+    analogWrite(controllerRB, 0);
+  }
+
+  // Serial.println("");
+
+  //To do: throttle change limiting, to avoid radical changes of direction for large DC motors
+
+  delay(50);
+
+
+  
+  // Serial.println(header.from_node);
+  // Serial.print(" x ");
+  // Serial.print(msg.x);
+  // Serial.print("  y ");
+  // Serial.print(msg.y);
+  // Serial.print("  sw ");
+  // Serial.println(msg.sw);
 
 
   //if ( header.from_node != this_node || header.from_node > 00 )                                // If this message is from ourselves or the base, don't bother adding it to the active nodes.
