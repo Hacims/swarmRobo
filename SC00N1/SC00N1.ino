@@ -47,7 +47,7 @@
 #include <RF24.h>
 #include <SPI.h>
 #include "printf.h"
-
+#include <math.h>
 /***********************************************************************
 ************* Set the Node Address *************************************
 /***********************************************************************/
@@ -244,13 +244,25 @@ bool send_J(uint16_t to)
   int x = myData.Xposition;
   int y = myData.Yposition;
   bool sw = myData.switchOn;
+ // caculation to restrict y to forward motion only an x to + or - 45 degrees 
+ if (y < 558) {
+  y = 558;
+ }
+  float tan = abs(y / x);
+  double angle = atan(tan);
+  angle = 1.57 - angle;
+  if (angle > 1) {
+  x = y;
+  }
+  Serial.print(" angle: ");
+  Serial.println(angle);
   msg_J msg = {x, y, sw};
-  //Serial.print("outgoing msg : x: ");
-  //Serial.print(x);
-  //Serial.print(" y ");
-  //Serial.print(y);
-  //Serial.print(" sw ");
-  //Serial.print(sw);
+  Serial.print("outgoing msg : x: ");
+  Serial.print(x);
+  Serial.print(" y ");
+  Serial.print(y);
+  Serial.print(" sw ");
+  Serial.print(sw);
   
   return network.write(header, &msg, sizeof (msg));
 }
