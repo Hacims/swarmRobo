@@ -238,21 +238,26 @@ bool send_N(uint16_t to)
 bool send_J(uint16_t to)
 {
   RF24NetworkHeader header(/*to node*/ to, /*type*/ 'J' /*Time*/);
-  
+  Serial.println("entering send J");
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
   int x = myData.Xposition;
   int y = myData.Yposition;
   bool sw = myData.switchOn;
  // caculation to restrict y to forward motion only an x to + or - 45 degrees 
- if (y < 558) {
-  y = 558;
+ if (y < 558) {             //y = 558 is the null posion on our joy stick
+  y = 558;              // if the y is less than 558 we restrict to 558 so we dont go backwards
  }
-  float tan = abs(y / x);
+  float tan = (y - 558 / (x - 550));
   double angle = atan(tan);
-  angle = 1.57 - angle;
-  if (angle > 1) {
+  angle = 1.57 - angle;      //we are subtracting the angle pi over 2 to determin the angle ffrom strait a head  
+  if (angle > .785) {      // if the angle > than pi/4 make x = to y to put it at 45 dregrees
+  if (tan < 0.00){
+    x = -y;
+  }
+ else{
   x = y;
+  }
   }
   Serial.print(" angle: ");
   Serial.println(angle);

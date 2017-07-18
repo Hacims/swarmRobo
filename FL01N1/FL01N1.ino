@@ -202,30 +202,29 @@ void loop(){
     
     
     if ( num_active_nodes ){                            // Or if we have active nodes,
-        to = active_nodes[next_ping_node_index++];      // Send to the next active node
-        if ( next_ping_node_index > num_active_nodes ){ // Have we rolled over?
+       to = active_nodes[next_ping_node_index++];      // Send to the next active node
+       if ( next_ping_node_index > num_active_nodes ){ // Have we rolled over?
 	    next_ping_node_index = 0;                   // Next time start at the beginning
 	    to = 00;                                    // This time, send to node 00.
         }
     }
 
-    bool ok;
+   bool ok;
 
-    
-    if ( this_node > 00 || to == 00 ){                    // Normal nodes send a 'T' ping
-        ok = send_T(to);   
-   
+
+   if ( this_node > 00 || to == 00 ){                    // Normal nodes send a 'T' ping
+      ok = send_T(to);   
+   }   
       ok = send_A(to);
   if (ok){
     printf_P(PSTR("%lu: APP Send_A ok\n\r"),millis());
-  }else{
     printf_P(PSTR("%lu: APP Send_A failed\n\r"),millis());
     last_time_sent -=100;
   }
     
-    }else{                                                // Base node sends the current active nodes out
-        ok = send_N(to);
-    }
+else{                                                // Base node sends the current active nodes out
+      ok = send_N(to);
+   }
     
     if (ok){                                              // Notify us of the result
         printf_P(PSTR("%lu: APP Send ok\n\r"),millis());
@@ -234,13 +233,13 @@ void loop(){
         last_time_sent -= 100;                            // Try sending at a different time next time
     }
   }
-
+}
 
 //  delay(50);                          // Delay to allow completion of any serial printing
 //  if(!network.available()){
 //      network.sleepNode(2,0);         // Sleep this node for 2 seconds or a payload is received (interrupt 0 triggered), whichever comes first
 //  }
-}
+//}
 
 /**
  * Send a 'T' message, the current time
